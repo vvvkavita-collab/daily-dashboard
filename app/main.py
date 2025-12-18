@@ -1,50 +1,50 @@
-from fastapi import FastAPI, Form
-from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi import FastAPI, UploadFile, File, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from starlette.requests import Request
-import subprocess
+import pandas as pd
+import os
 
-
-from app.prompts import print_prompt, digital_prompt
-from app.rules import clean_hindi_text
-
-
-app = FastAPI(title="Hindi News AI Desk")
-
-
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 
+DATA_FILE = "data/master_data.csv"
 
 @app.get("/", response_class=HTMLResponse)
-async def home(request: Request):
-return templates.TemplateResponse("index.html", {"request": request})
+def upload_page(request: Request):
+    return templates.TemplateResponse("upload.html", {"request": request})
 
+@app.post("/upload")
+async def upload_excel(file: UploadFile = File(...)):
+    df_new = pd.read_excel(file.file)
 
-@app.post("/rewrite")
-async def rewrite_news(
-content: str = Form(...),
-location: str = Form(...),
-mode: str = Form(...)
-):
-content = clean_hindi_text(content)
+    # Create data folder if not exists
+    os.makedirs("data", exist_ok=True)
 
+    if os.path.exists(DATA_FILE):
+        df_old = pd.read_csv(DATA_FILE)
+        df_all = pd.concat([df_old, df_new], ignore_index=True)
+    else:
+        df_all = df_new
 
-if mode == "print":
-prompt = print_prompt(content, location)
-else:
-prompt = digital_prompt(content, location)
+    df_all.to_csv(DATA_FILE, index=False)
+    return RedirectResponse("/dashboard", status_code=303)
 
+@app.get("/dashboard", response_class=HTMLResponse)
+def dashboard(request: Request):
+    if not os.path.exists(DATA_FILE):
+        return HTMLResponse("No data uploaded yet")
 
-# Ollama local model call (no API)
-result = subprocess.run(
-["ollama", "run", "mistral"],
-input=prompt,
-text=True,
-capture_output=True
-)
+    df = pd.read_csv(DATA_FILE)
 
+    summary = df.groupby("Profile")[["Total Video", "Total Views"]].sum().reset_index()
+    dates = sorted(df["Date"].unique(), reverse=True)
 
-output = result.stdout.strip()
-return JSONResponse({"output": output})
+    return templates.TemplateResponse(
+        "dashboard.html",
+        {
+            "request": request,
+            "tables": df.tail(50).to_html(index=False),
+            "summary": summary.to_dict(orient="records"),
+            "dates": dates
+        }
+    )
