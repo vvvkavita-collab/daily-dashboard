@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Daily Dashboard</title>
+</head>
+<body>
+    <h2>Profile-wise Summary</h2>
+    <table border="1">
+        <tr>
+            <th>Profile</th>
+            <th>Total Video</th>
+            <th>Total Views</th>
+        </tr>
+        {% for row in summary %}
+        <tr>
+            <td>{{ row.Profile }}</td>
+            <td>{{ row['Total Video'] }}</td>
+            <td>{{ row['Total Views'] }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <h2>Latest Records</h2>
+    {{ tables|safe }}
+</body>
+</html>
